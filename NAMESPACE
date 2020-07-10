@@ -1,5 +1,4 @@
 export("msprime_wrapper")
 export("lower")
 export("scale_to_0_1")
-export("island_model")
 

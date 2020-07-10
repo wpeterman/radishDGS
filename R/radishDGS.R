@@ -1,5 +1,6 @@
 .onLoad <- function(libname, pkgname) {
-  reticulate::import_from_path(module = "island_model", path = system.file("py/island_model.py", package=packageName()))
+  ##this fails with fresh install. Instead, see top of msprime_wrapper()
+  #reticulate::source_python(system.file("py/island_model.py",package="radishDGS"),envir=globalenv())
 }
 #source_python("island_model.py") #NB: mac users may have to modify?
 

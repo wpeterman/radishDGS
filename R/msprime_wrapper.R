@@ -11,6 +11,9 @@ msprime_wrapper <-
            number_of_loci = 500,
            maf = 0.05)
 {
+
+  reticulate::source_python(system.file("py/island_model.py",package="radishDGS"))
+
   stopifnot(reps > 0)
   stopifnot(length(effect_size) == length(covariates))
   stopifnot(buffer_size >= 0. & buffer_size < 0.5)
