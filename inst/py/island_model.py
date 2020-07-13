@@ -17,6 +17,7 @@ def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, 
     assert(split_time > 0.)
     assert(anc_size > 0.)
     assert(num_loci > 0)
+    assert(maf_filter > 0. and maf_filter < 0.5)
     num_popul = smp_size.shape[0]
     # define populations
     pop_confg = []
@@ -52,14 +53,23 @@ def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, 
     for locus in sim:
         if keep_trees:
             trees += [locus.at(0.).newick()]
-        # if locus has no variants, mutate it until it does!
-        fail = False
+        # if locus has no variants, or if it doesn't pass MAF filter, 
+        # mutate it until it does
+        for site in locus.variants():
+            freq = float(numpy.sum(site.genotypes))/float(numpy.sum(smp_size)) 
+            if freq < maf_filter or freq > 1.-maf_filter:
+                fail = True
+                break
+            else:
+                fail = False
+                break
         while locus.get_num_mutations() == 0 or fail:
             ran_seed += 100
             locus = msprime.mutate(locus, rate = mu, keep = False, random_seed = ran_seed)
             # reject if first site doesn't pass MAF filter
             for site in locus.variants():
-                if float(numpy.sum(site.genotypes))/float(numpy.sum(smp_size)) < maf_filter:
+                freq = float(numpy.sum(site.genotypes))/float(numpy.sum(smp_size)) 
+                if freq < maf_filter or freq > 1.-maf_filter:
                     fail = True
                     break
                 else:

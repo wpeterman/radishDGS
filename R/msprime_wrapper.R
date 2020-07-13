@@ -11,11 +11,12 @@ msprime_wrapper <-
            number_of_loci = 500,
            maf = 0.05)
 {
+  library(radish)
 
   reticulate::source_python(system.file("py/island_model.py",package="radishDGS"))
 
   stopifnot(reps > 0)
-  stopifnot(length(effect_size) == length(covariates))
+  stopifnot(length(effect_size) == dim(covariates)[3])
   stopifnot(buffer_size >= 0. & buffer_size < 0.5)
   stopifnot(number_of_demes > 0)
   stopifnot(sampled_proportion_of_demes > 0. & sampled_proportion_of_demes <= 1.)
@@ -42,7 +43,7 @@ msprime_wrapper <-
   }
 
   # log-linear conductance surface
-  conductance[] <- covariates[[1]]
+  conductance <- covariates[[1]]
   if (length(covariates) > 1)
     conductance[] <- exp(effect_size * covariates[[1]][])
   else
@@ -65,15 +66,16 @@ msprime_wrapper <-
       all_deme_coords         <- xyFromCell(conductance, all_deme_cells, spatial=TRUE)
 
       # choose some number of demes inside study area (e.g. not in buffer) to sample
-      number_of_sampled_demes <- floor(proportion_of_sampled_demes * number_of_demes)
+      number_of_sampled_demes <- floor(sampled_proportion_of_demes * number_of_demes)
       demes_not_in_buffer     <- which(!extract(buffer, all_deme_coords))
       sampled_demes           <- sort(sample(demes_not_in_buffer, number_of_sampled_demes)) #will fail if insufficient number
 
       # get "true" resistance distances among demes
       # NB: the effect sizes here are for CONDUCTANCE (the inverse of resistance)
-      resistance_model        <- conductance_surface(covariates, all_deme_coords, directions=8)
-      resistance_distance     <- radish_distance(effect_size, ~., resistance_model, radish::loglinear_conductance)
-      geographic_distance     <- radish_distance(0*effect_size, ~., resistance_model, radish::loglinear_conductance)
+      form <- as.formula(paste0("~", paste(names(covariates), sep="+")))
+      resistance_model        <- radish::conductance_surface(covariates, all_deme_coords, directions=8)
+      resistance_distance     <- radish::radish_distance(matrix(effect_size, 1, length(effect_size)), form, resistance_model, radish::loglinear_conductance)$distance[,,1]
+      geographic_distance     <- radish::radish_distance(matrix(0, 1, length(effect_size)), form, resistance_model, radish::loglinear_conductance)$distance[,,1]
 
       # standardize resistance distance to [0,1] and calculate migration matrix
       resistance_distance    <- scale_to_0_1(resistance_distance)
@@ -99,7 +101,7 @@ msprime_wrapper <-
                              pop_size   = pop_size, #contemporary (DIPLOID) population sizes, as number of diploids
                              smp_size   = smp_size, #number of sampled HAPLOIDS per population (can be 0, in which case populations are modelled but not sampled)
                              ran_seed   = seed,
-                             maf_filter = 0.05,
+                             maf_filter = maf,
                              keep_trees = TRUE, #if true, keep coalescent tree for each locus as newick (could be used to simulate msats)
                              use_dtwf   = TRUE) #if true, use Wright-Fisher backward time simulations (discrete generations, better when population sizes are small/migr rates high)
 
@@ -112,6 +114,8 @@ msprime_wrapper <-
       # filter by minor allele frequency (only applies to SNPs)
       frequency  <- rowMeans(genotypes) / 2
       maf_filter <- frequency >= maf & frequency <= 1.-maf
+      if (any(!maf_filter))
+        warning("MAF rejection sampling failed, check python source")
       genotypes  <- genotypes[maf_filter,]
       frequency  <- frequency[maf_filter]
       cat("Simulation produced", nrow(genotypes), "SNPs passing MAF filter\n")
@@ -122,7 +126,8 @@ msprime_wrapper <-
 
       # store results needed to fit models/reproduce simulation (won't store anything if simulation fails)
       timestamp     <- Sys.time()
-      output[[sim]] <- list(covariates    = covariates, 
+      output[[paste0("seed", seed)]] <- 
+                       list(covariates    = covariates, 
                             genotypes     = genotypes[,was_sampled], 
                             coords        = all_deme_coords[demes_of_samples,], 
                             rdistance     = resistance_distance[demes_of_samples,demes_of_samples],
@@ -130,7 +135,6 @@ msprime_wrapper <-
                             migration     = migration_matrix[demes_of_samples,demes_of_samples],
                             covariance    = genetic_covariance[was_sampled,was_sampled],
                             frequency     = frequency,
-                            input_dir     = input_dir,
                             random_seed   = seed,
                             timestamp     = timestamp)
     })
