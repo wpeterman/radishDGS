@@ -1,8 +1,7 @@
-
 import msprime
 import numpy
 
-def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, ran_seed, keep_trees = True, use_dtwf = False):
+def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, ran_seed, maf_filter = 0., keep_trees = True, use_dtwf = False):
     # time is in generations, sizes are absolute number DIPLOIDS
     # migration matrix entry m_ij is the proportion of i that comes FROM j
     num_loci = int(num_loci)
@@ -54,9 +53,18 @@ def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, 
         if keep_trees:
             trees += [locus.at(0.).newick()]
         # if locus has no variants, mutate it until it does!
-        while locus.get_num_mutations() == 0:
+        fail = False
+        while locus.get_num_mutations() == 0 or fail:
             ran_seed += 100
             locus = msprime.mutate(locus, rate = mu, keep = False, random_seed = ran_seed)
+            # reject if first site doesn't pass MAF filter
+            for site in locus.variants():
+                if float(numpy.sum(site.genotypes))/float(numpy.sum(smp_size)) < maf_filter:
+                    fail = True
+                    break
+                else:
+                    fail = False
+                    break
         # get first variant within locus
         for site in locus.variants():
             genotypes += [site.genotypes]

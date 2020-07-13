@@ -99,6 +99,7 @@ msprime_wrapper <-
                              pop_size   = pop_size, #contemporary (DIPLOID) population sizes, as number of diploids
                              smp_size   = smp_size, #number of sampled HAPLOIDS per population (can be 0, in which case populations are modelled but not sampled)
                              ran_seed   = seed,
+                             maf_filter = 0.05,
                              keep_trees = TRUE, #if true, keep coalescent tree for each locus as newick (could be used to simulate msats)
                              use_dtwf   = TRUE) #if true, use Wright-Fisher backward time simulations (discrete generations, better when population sizes are small/migr rates high)
 
