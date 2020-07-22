@@ -1,7 +1,7 @@
 import msprime
 import numpy
 
-def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, ran_seed, maf_filter = 0., keep_trees = True, use_dtwf = False):
+def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, ran_seed, maf_filter = 0., keep_trees = True, use_dtwf = False, keep_variants = True, verbose = True):
     # time is in generations, sizes are absolute number DIPLOIDS
     # migration matrix entry m_ij is the proportion of i that comes FROM j
     num_loci = int(num_loci)
@@ -38,6 +38,12 @@ def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, 
     else:
         model = "hudson"
     mu = float(num_popul)/(numpy.mean(pop_size)*split_time) #heuristic; should generate mutations for most loci without wasting too much time
+    if verbose:
+        dd = msprime.DemographyDebugger(
+                population_configurations=pop_confg,
+                demographic_events=dem_event,
+                migration_matrix=migr_mat)
+        dd.print_history()
     sim = msprime.simulate(
             population_configurations = pop_confg,
             migration_matrix = migr_mat,
@@ -48,36 +54,47 @@ def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, 
             random_seed = ran_seed,
             model = model)
     # iterate over trees, extract genotypes and newick strings
+    if verbose:
+        print("[msprime_wrapper] mutating trees")
     trees = []
     genotypes = []
     for locus in sim:
         if keep_trees:
             trees += [locus.at(0.).newick()]
-        # if locus has no variants, or if it doesn't pass MAF filter, 
-        # mutate it until it does
-        for site in locus.variants():
-            freq = float(numpy.sum(site.genotypes))/float(numpy.sum(smp_size)) 
-            if freq < maf_filter or freq > 1.-maf_filter:
+        if keep_variants:
+            # if locus has no variants, or if it doesn't pass MAF filter, 
+            # mutate it until it does
+            if verbose:
+                print("[msprime_wrapper] simulating locus ...")
+            if locus.get_num_mutations() == 0:
                 fail = True
-                break
             else:
-                fail = False
-                break
-        while locus.get_num_mutations() == 0 or fail:
-            ran_seed += 100
-            locus = msprime.mutate(locus, rate = mu, keep = False, random_seed = ran_seed)
-            # reject if first site doesn't pass MAF filter
-            for site in locus.variants():
-                freq = float(numpy.sum(site.genotypes))/float(numpy.sum(smp_size)) 
-                if freq < maf_filter or freq > 1.-maf_filter:
+                for site in locus.variants():
+                    freq = float(numpy.sum(site.genotypes))/float(numpy.sum(smp_size)) 
+                    if freq < maf_filter or freq > 1.-maf_filter:
+                        fail = True
+                        break
+                    else:
+                        fail = False
+                        break
+            while fail:
+                ran_seed += 100
+                locus = msprime.mutate(locus, rate = mu, keep = False, random_seed = ran_seed)
+                # reject if first site doesn't pass MAF filter
+                if locus.get_num_mutations() == 0:
                     fail = True
-                    break
                 else:
-                    fail = False
-                    break
-        # get first variant within locus
-        for site in locus.variants():
-            genotypes += [site.genotypes]
-            break
+                    for site in locus.variants():
+                        freq = float(numpy.sum(site.genotypes))/float(numpy.sum(smp_size)) 
+                        if freq < maf_filter or freq > 1.-maf_filter:
+                            fail = True
+                            break
+                        else:
+                            fail = False
+                            break
+            # get first variant within locus
+            for site in locus.variants():
+                genotypes += [site.genotypes]
+                break
     genotypes = numpy.array(genotypes)
     return {"genotypes" : genotypes, "trees" : trees}

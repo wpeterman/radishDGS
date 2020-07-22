@@ -9,6 +9,11 @@ msprime_wrapper <-
            conductance_quantile_for_demes = 0.5,
            dispersal_kernel = function(dist) exp(-1./0.3 * dist^2),
            number_of_loci = 500,
+           split_time = 200,
+           anc_size = 500,
+           deme_size = 1,
+           trees_only = FALSE,
+           verbose = FALSE,
            maf = 0.05)
 {
   library(radish)
@@ -49,8 +54,31 @@ msprime_wrapper <-
   else
     conductance[] <- exp(raster::getValues(covariates) %*% effect_size)
 
+  # simulate deme locations by sampling grid cells uniformly without replacement, where some condition is met
+  threshold               <- quantile(conductance, conductance_quantile_for_demes, na.rm = TRUE)
+  possible_cells          <- which(!is.na(conductance[]) & conductance[] >= threshold)
+  all_deme_cells          <- sample(possible_cells, number_of_demes)
+  all_deme_coords         <- xyFromCell(conductance, all_deme_cells, spatial=TRUE)
+
+  # choose some number of demes inside study area (e.g. not in buffer) to sample
+  number_of_sampled_demes <- floor(sampled_proportion_of_demes * number_of_demes)
+  demes_not_in_buffer     <- which(!extract(buffer, all_deme_coords))
+  sampled_demes           <- sort(sample(demes_not_in_buffer, number_of_sampled_demes)) #will fail if insufficient number
+
+  # get "true" resistance distances among demes
+  # NB: the effect sizes here are for CONDUCTANCE (the inverse of resistance)
+  form <- as.formula(paste0("~", paste(names(covariates), collapse="+")))
+  resistance_model        <- radish::conductance_surface(covariates, all_deme_coords, directions=8)
+  resistance_distance     <- radish::radish_distance(matrix(effect_size, 1, length(effect_size)), form, resistance_model, radish::loglinear_conductance)$distance[,,1]
+  geographic_distance     <- radish::radish_distance(matrix(0, 1, length(effect_size)), form, resistance_model, radish::loglinear_conductance)$distance[,,1]
+
+  # standardize resistance distance to [0,1] and calculate migration matrix
+  resistance_distance    <- scale_to_0_1(resistance_distance)
+  migration_matrix       <- dispersal_kernel(resistance_distance)
+  diag(migration_matrix) <- 0 #diagonal must be 0 for msprime
+
   output <- list()
-  for (seed in random_seeds)
+  for (seed in random_seeds) #NB: different genetic simulations for same spatial configuration
   {
     timer <- Sys.time()
     cat("\n---\nRunning simulation with random seed", seed, "on", as.character(timer), "\n")
@@ -59,31 +87,9 @@ msprime_wrapper <-
 
       set.seed(seed)
 
-      # simulate deme locations by sampling grid cells uniformly without replacement, where some condition is met
-      threshold               <- quantile(conductance, conductance_quantile_for_demes, na.rm = TRUE)
-      possible_cells          <- which(!is.na(conductance[]) & conductance[] >= threshold)
-      all_deme_cells          <- sample(possible_cells, number_of_demes)
-      all_deme_coords         <- xyFromCell(conductance, all_deme_cells, spatial=TRUE)
-
-      # choose some number of demes inside study area (e.g. not in buffer) to sample
-      number_of_sampled_demes <- floor(sampled_proportion_of_demes * number_of_demes)
-      demes_not_in_buffer     <- which(!extract(buffer, all_deme_coords))
-      sampled_demes           <- sort(sample(demes_not_in_buffer, number_of_sampled_demes)) #will fail if insufficient number
-
-      # get "true" resistance distances among demes
-      # NB: the effect sizes here are for CONDUCTANCE (the inverse of resistance)
-      form <- as.formula(paste0("~", paste(names(covariates), sep="+")))
-      resistance_model        <- radish::conductance_surface(covariates, all_deme_coords, directions=8)
-      resistance_distance     <- radish::radish_distance(matrix(effect_size, 1, length(effect_size)), form, resistance_model, radish::loglinear_conductance)$distance[,,1]
-      geographic_distance     <- radish::radish_distance(matrix(0, 1, length(effect_size)), form, resistance_model, radish::loglinear_conductance)$distance[,,1]
-
-      # standardize resistance distance to [0,1] and calculate migration matrix
-      resistance_distance    <- scale_to_0_1(resistance_distance)
-      migration_matrix       <- dispersal_kernel(resistance_distance)
-      diag(migration_matrix) <- 0 #diagonal must be 0 for msprime
 
       # diploid population sizes per deme: sample single individual per deme
-      pop_size <- rep(1, number_of_demes)
+      pop_size <- rep(deme_size, number_of_demes)
 
       # track a diploid from each "sampled" deme
       # NB: should be less than or equal to 2*pop_size from previous step
@@ -95,14 +101,16 @@ msprime_wrapper <-
       #     by minor allele frequency, as low frequency alleles are often less informative about population
       #     structure (and may violate model assumptions)
       SNPsim <- island_model(num_loci   = number_of_loci, #number of loci (e.g. SNPs)
-                             split_time = 200, #generations in past where panmixia ended
-                             anc_size   = 500, #ancestral population size, as number of DIPLOIDS
+                             split_time = split_time, #generations in past where panmixia ended
+                             anc_size   = anc_size, #ancestral population size, as number of DIPLOIDS
                              migr_mat   = migration_matrix, #migration matrix. element m_ij is proportion of population i that is replaced by individuals from population j, PER GENERATION. These should be small.
                              pop_size   = pop_size, #contemporary (DIPLOID) population sizes, as number of diploids
                              smp_size   = smp_size, #number of sampled HAPLOIDS per population (can be 0, in which case populations are modelled but not sampled)
                              ran_seed   = seed,
                              maf_filter = maf,
                              keep_trees = TRUE, #if true, keep coalescent tree for each locus as newick (could be used to simulate msats)
+                             keep_variants = !trees_only,
+                             verbose = verbose,
                              use_dtwf   = TRUE) #if true, use Wright-Fisher backward time simulations (discrete generations, better when population sizes are small/migr rates high)
 
       # create diploid genotypes by pooling two haploids from same spatial location
