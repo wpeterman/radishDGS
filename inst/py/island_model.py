@@ -31,7 +31,7 @@ def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, 
         time = split_time, source = i, 
         destination = num_popul-1, proportion = 1.)]
     dem_event += [msprime.PopulationParametersChange(
-        time = split_time, initial_size = anc_size)]
+        time = split_time, initial_size = anc_size, population = i)]
     # simulate trees
     if use_dtwf:
         model = "dtwf"

@@ -6,7 +6,7 @@ msprime_wrapper <-
            buffer_size = 0.2,
            number_of_demes = 300,
            sampled_proportion_of_demes = 0.1,
-           conductance_quantile_for_demes = 0.5,
+           conductance_quantile_for_demes = 0.,
            dispersal_kernel = function(dist) exp(-1./0.3 * dist^2),
            number_of_loci = 500,
            split_time = 200,
@@ -25,7 +25,7 @@ msprime_wrapper <-
   stopifnot(buffer_size >= 0. & buffer_size < 0.5)
   stopifnot(number_of_demes > 0)
   stopifnot(sampled_proportion_of_demes > 0. & sampled_proportion_of_demes <= 1.)
-  stopifnot(conductance_quantile_for_demes > 0.)
+  stopifnot(conductance_quantile_for_demes >= 0.)
   stopifnot(maf >= 0. & maf < 0.5)
 
   set.seed(master_seed)
@@ -49,7 +49,7 @@ msprime_wrapper <-
 
   # log-linear conductance surface
   conductance <- covariates[[1]]
-  if (length(covariates) > 1)
+  if (length(covariates) == 1)
     conductance[] <- exp(effect_size * covariates[[1]][])
   else
     conductance[] <- exp(raster::getValues(covariates) %*% effect_size)
@@ -86,7 +86,6 @@ msprime_wrapper <-
     try({ #this ensures that failure of a given simulation will not stop the loop
 
       set.seed(seed)
-
 
       # diploid population sizes per deme: sample single individual per deme
       pop_size <- rep(deme_size, number_of_demes)
@@ -129,7 +128,7 @@ msprime_wrapper <-
       cat("Simulation produced", nrow(genotypes), "SNPs passing MAF filter\n")
 
       # genetic covariance (for SNPs)
-      normalized_genotypes <- (genotypes - frequency)/sqrt(2 * frequency * (1-frequency)) #"normalized" genotypes 
+      normalized_genotypes <- (genotypes - 2 * frequency)/sqrt(2 * frequency * (1-frequency)) #"normalized" genotypes 
       genetic_covariance   <- t(normalized_genotypes) %*% normalized_genotypes / (nrow(normalized_genotypes)-1)
 
       # store results needed to fit models/reproduce simulation (won't store anything if simulation fails)
