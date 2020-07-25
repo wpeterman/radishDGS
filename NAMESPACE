@@ -1,4 +1,5 @@
 export("msprime_wrapper")
+export("msprime_wrapper2")
 export("lower")
 export("scale_to_0_1")
 

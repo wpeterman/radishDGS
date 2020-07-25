@@ -25,6 +25,8 @@ def island_model (num_loci, split_time, anc_size, migr_mat, pop_size, smp_size, 
     for i in range(num_popul):
       pop_confg += [msprime.PopulationConfiguration(
         sample_size=smp_size[i], initial_size=pop_size[i])]
+      dem_event += [msprime.PopulationParametersChange(
+        time = 0., initial_size=pop_size[i], population = i)]
     # demographic events: split from ancestral lineage at same time
     for i in range(num_popul-1):
       dem_event += [msprime.MassMigration(
