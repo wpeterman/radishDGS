@@ -1,52 +1,55 @@
 #' @author Bill Peterman
+#' @title Run CDPOP simulation from R
 #' @description Function to conduct landscape simulation with NLMR and genetic simulation with CDPOP
 #' 
-#' @param master_seed Seed value
+#' @param master_seed Seed value. This is important to set when wanting keep the same locations of points across simulations, but vary some other dimension(s) of the simulation (e.g., dispersal)
 #' @param covariates Raster stack of input surface(s)
-
 #' @param conductance_quantile_for_demes Threshold to set for the proportion of the landscape that is 'good' habitat where points will be distributed during simulation (Default = 0.4)
 #' @param effect_size Effect size(s) of surfaces in conductance model
-#' @param number_of_demes Number of demes/spatial locations to simulate
-#' @param sampled_proportion_of_demes Number of individuals to randomly select from those simulated. Ideally <=75% of `number_of_demes`
+#' @param number_of_demes Number of demes/spatial locations to simulate (Default = 150)
+#' @param sampled_proportion_of_demes Number of demes/individuals to randomly select from those simulated (Default = 0.5)
 #' @param deme_size Number of individuals in each deme (Default = 10)
 #' @param proportion_deme_sampled Proportion of individuals within each deme to be randomly sampled (Default = 0.5)
 #' @param buffer_size Buffer to filter/exclude edge demes from the analysis (Default = 0.15). Peripheral populations will not be selected.
 #' @param MeanFecundity Mean number of offspring produced by each female. Follows a Poisson process (Default = 4)
 #' @param iter Can specify the iteration number of a for loop. Will be used in naming output folders. If not specified, the time stamp will be used
-#' @param CDPOP.py Full path to the CDPOP.py file
-#' @param sim_name Name for simulation results. Defaults to 'output'
-#' @param sim_dir Directory where simulation results will be written
+#' @param sim_dir Main directory where simulation results will be written
 #' @param looptime Total number of steps ('generations') in CDPOP simulations (Default = 201)
 #' @param output_years The year(s) that you want CDPOP to write simulation results to file (Default = 200)
 #' @param loci Number of microsatellite loci to simulate (Default = 20)
 #' @param alleles Number of alleles at each locus to simulate (Default = 20)
-
 #' @param matemovethresh Dispersal threshold value (Default = 0.05). This is the quantile threshold of all resistance distances
+#' @param python Optional. Only needed if Python 2.7 is not in your system path. If needed, specify the full path to the Python 2.7x program file.
+#' 
+#' @description  This function will compile the inputs, run CDPOP, and return the relevant data objects for future use. All generated files are also saved to the specified working directory.
+#' 
+#' ** NOTE: CDPOP requires Python 2.7 to run. You will need to have this version of Python installed, along with the necessary libraries (see the CDPOP manual). CDPOP itself is part if the `radishDGS` package.
 #' 
 #' @export
 cdpop_sim <- function(master_seed,
                       covariates,
                       conductance_quantile_for_demes = 0.4,
-                      effect_size = c(7, -7),
-                      number_of_demes = 300,
+                      effect_size,
+                      number_of_demes = 150,
                       sampled_proportion_of_demes = 0.5,
                       deme_size = 10,
                       proportion_deme_sampled = 0.5,
                       buffer_size = 0.15,
                       MeanFecundity = 4,
                       iter = NULL,
-                      CDPOP.py,
-                      sim_name = 'output_',
-                      sim_dir = "C:/perspective_sim/",
+                      sim_dir,
                       looptime = 201,
                       output_years = 200,
                       loci = 20,
                       alleles = 20,
-                      matemovethresh = 0.05
+                      matemovethresh = 0.05,
+                      python = NULL
 ){
   
-  library(radish)
-  
+  dir <- try(dir.exists(sim_dir), silent = T)
+  if(class(dir) == 'try-error'){
+    stop('Specify a directory to save simulation results!!!')
+  }
   stopifnot(class(covariates) != 'RasterStack' | class(covariates) != 'RasterLayer')
   if(class(covariates) != 'RasterStack')
     covariates <- stack(covariates)
@@ -59,22 +62,26 @@ cdpop_sim <- function(master_seed,
   
   set.seed(master_seed)
   
-
-# Defaults ----------------------------------------------------------------
+  CDPOP.py <- list.files(system.file('cdpop', package = 'radishDGS'), full.names = TRUE)[1]
+  
+  # Defaults ----------------------------------------------------------------
   gridformat <- 'cdpop'  
   percent_quant <- 'quant'
-  n_axes <- 64
+  n_axes <- 32
   matemoveno <- 2
+  sim_name <- 'output_'
   
   # >> Create Directory -----------------------------------------------------
   if(is.null(iter)){
     iter <- as.numeric(Sys.time())
   }
-  dir.create(paste0(sim_dir, "Results/",
-                    'iter__', iter),
-             recursive = TRUE) 
+  suppressWarnings(
+    dir.create(paste0(sim_dir, "/Results/",
+                      'iter__', iter),
+               recursive = TRUE) 
+  )
   
-  out <- paste0(sim_dir, "Results/",
+  out <- paste0(sim_dir, "/Results/",
                 'iter__', iter, "/")
   
   # Create buffer -----------------------------------------------------------
@@ -141,6 +148,7 @@ cdpop_sim <- function(master_seed,
   
   # standardize resistance distance to [0,1] and calculate migration matrix
   resistance_distance <- scale_to_0_1(resistance_distance)
+  
   # migration_matrix <- dispersal_kernel(resistance_distance)
   # diag(migration_matrix) <- 0 #diagonal must be 0 for msprime
   
@@ -204,7 +212,7 @@ cdpop_sim <- function(master_seed,
     n_ind_sampled <- 1
     
     
-    # Sample & Calculated genetic distance(s) ---------------------------------
+    # Sample & Calculate genetic distance(s) ---------------------------------
     
     sim_demes <- demes_not_in_buffer[demes_not_in_buffer %in% pops$ind]
     
@@ -217,10 +225,10 @@ cdpop_sim <- function(master_seed,
                                  number_of_sampled_demes,
                                  replace = F))
     
-    gi_sub <- which(unique(pops$ind) %in% demes_not_in_buffer)
+    gi_sub <- which(unique(pops$ind) %in% sampled_demes)
     gi_final <- cdpop_grid[gi_sub] 
     
-
+    
     # ns <- ifelse(number_of_sampled_demes > length(pops$ind), 
     #              length(pops$ind), 
     #              number_of_sampled_demes)
@@ -238,7 +246,7 @@ cdpop_sim <- function(master_seed,
       n_axes <- length(gi_sub)
     }
     
-    Dps <- 1-propShared(cdpop_grid[gi_sub])
+    Dps <- 1-adegenet::propShared(cdpop_grid[gi_sub])
     pca <- pca_dist(cdpop_grid[gi_sub], n_axes = n_axes)
     
     ## Quick plot select
@@ -294,15 +302,20 @@ cdpop_sim <- function(master_seed,
                 suffix = names(covariates_),
                 overwrite = T)
     
-    results <- list(genind = gi_final,
-                    sampled_demes = s_pts,
+    results <- list(sim_genind = gi_final,
+                    pts = s_pts,
                     pca = pca,
-                    Dps = Dps,
-                    resistance_distance = resistance_distance[sampled_demes,sampled_demes],
-                    geographic_distance = geographic_distance[sampled_demes,sampled_demes],
+                    dps = Dps,
+                    trueRes = resistance_distance[sampled_demes,sampled_demes],
+                    geoD = geographic_distance[sampled_demes,sampled_demes],
                     conductance_surface = conductance,
-                    covariates = covariates,
-                    covaraites_scaled = covariates_)
+                    covariates = covariates_,
+                    covariates_Noscale = covariates,
+                    out_dir = paste0(out,"/"),
+                    effect_size = effect_size)
+    saveRDS(results,
+            paste0(out, "AllResults_list.rds")
+    )
     
   } else {
     
@@ -319,12 +332,12 @@ cdpop_sim <- function(master_seed,
     sampled_demes <- sort(sample(sim_demes, number_of_sampled_demes))
     
     # ** Sample genind -----------------------------------------------------------
-    gi_sub <- which(unique(pops$pop) %in% demes_not_in_buffer)
-    gi_sep <- seppop(cdpop_grid)[gi_sub] 
+    gi_sub <- which(unique(pops$pop) %in% sampled_demes)
+    gi_sep <- adegenet::seppop(cdpop_grid)[gi_sub] 
     gi_sep_ <- lapply(gi_sep, function(x) x[sample(1:nrow(x$tab), n_ind_sampled)])
     
-    gi_final <- repool(gi_sep_)
-
+    gi_final <- adegenet::repool(gi_sep_)
+    
     s_pts <- all_deme_coords[sampled_demes]
     
     s_pops <- data.frame(pop = sampled_demes,
@@ -333,17 +346,17 @@ cdpop_sim <- function(master_seed,
     
     
     # ** Genetic distance -----------------------------------------------------
-
+    
     Fst <- PopGenReport::pairwise.fstb(gi_final)
     
     ## Convert `genind` object to `genpop` object
-    pop.gp <- genind2genpop(gi_final)
+    pop.gp <- adegenet::genind2genpop(gi_final)
     
     ## Calculate Dc from `genpop` object
-    Dc <- as.matrix(dist.genpop(pop.gp, 
-                                method = 2, 
-                                diag = T, 
-                                upper = T))  
+    Dc <- as.matrix(adegenet::dist.genpop(pop.gp, 
+                                          method = 2, 
+                                          diag = T, 
+                                          upper = T))  
     
     ##
     
@@ -372,30 +385,55 @@ cdpop_sim <- function(master_seed,
     write.csv(geographic_distance[sampled_demes,sampled_demes], 
               file = paste0(out, "geographic_ResistDist.csv"))
     
-    writeRaster(covariates,
-                filename = paste0(out,"/"),
-                format = 'GTiff',
-                bylayer = TRUE,
-                suffix = names(covariates),
-                overwrite = T)
+    defaultW <- getOption("warn") 
+    options(warn = -1) 
     
-    writeRaster(covariates_,
-                filename = paste0(out,"/"),
-                format = 'GTiff',
-                bylayer = TRUE,
-                suffix = names(covariates_),
-                overwrite = T)
+    suppressWarnings(
+      writeRaster(covariates,
+                  filename = paste0(out,"/", names(covariates), format = '.tif'),
+                  # format = 'GTiff',
+                  bylayer = TRUE,
+                  suffix = '',
+                  overwrite = T)
+    )
     
-    results <- list(genind = gi_final,
-                    sampled_demes = s_pts,
-                    Dc = Dc,
-                    Fst = Fst,
-                    resistance_distance = resistance_distance[sampled_demes,sampled_demes],
-                    geographic_distance = geographic_distance[sampled_demes,sampled_demes],
+    suppressWarnings(
+      writeRaster(covariates_,
+                  filename = paste0(out,"/", names(covariates_), format = '.tif'),
+                  # format = 'GTiff',
+                  bylayer = TRUE,
+                  suffix = '',
+                  overwrite = T)
+    )
+    
+    options(warn = defaultW)
+    
+    results <- list(sim_genind = gi_final,
+                    pts = s_pts,
+                    dc = Dc,
+                    fst = Fst,
+                    trueRes = resistance_distance[sampled_demes,sampled_demes],
+                    geoD = geographic_distance[sampled_demes,sampled_demes],
                     conductance_surface = conductance,
-                    covariates = covariates,
-                    covaraites_scaled = covariates_)
+                    covariates = covariates_,
+                    covariates_Noscale = covariates,
+                    out_dir = paste0(out,"/"),
+                    effect_size = effect_size)
+    
+    saveRDS(results,
+            paste0(out, "AllResults_list.rds")
+    )
+    
+    
   } ## Close Ind vs Deme
+  
+  ## Save plot
+  png(file = paste0(out, "dist_resist_plots.png"),
+      width = 10, height = 8,
+      units = 'in',
+      res = 300)
+  plot_cdpop(results)
+  dev.off()
   
   return(results)
   

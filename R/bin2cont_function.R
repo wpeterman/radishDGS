@@ -1,4 +1,5 @@
 #' @author Bill Peterman
+#' @title  Make a binary raster continuous
 #' @description Function to create a continuous surface from a binary surface
 #' 
 #' @param bin_rast Binary (1/0) raster
@@ -8,9 +9,8 @@
 
 bin2cont <- function(bin_rast,
                      window = 3){
-  library(raster)
-  
-  cont_rast <- focal(bin_rast,
+
+  cont_rast <- raster::focal(bin_rast,
                      w = matrix(1 / window^2, nc = window, nr = window))
   return(cont_rast)
 }

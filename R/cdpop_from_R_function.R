@@ -1,4 +1,5 @@
 #' @author Bill Peterman
+#' @title Internal CDPOP function
 #' @description Function to run CDPOP from R
 #' 
 #' @param CDPOP.py Full path to the CDPOP.py file
@@ -17,7 +18,7 @@
 #' @param matemoveparB Not used with inverse square movement
 #' @param matemoveparC Not used with inverse square movement
 #' @param matemovethresh Default = 'max'; The maximum movement is the maximum resistance distance
-#' @param output_matedistance
+#' @param output_matedistance Does mate movement distance differ (Default = 'N')
 #' @param sexans Default = 'N'; No selfing
 #' @param Freplace Default = 'N'; Females mate without replacement
 #' @param Mreplace Default = 'N'; Males mate without replacement
@@ -61,9 +62,10 @@
 #' @param cdinfect Default = 'N'; No epigenetics
 #' @param transmissionprob Default = 0; No epigenetics
 #' @param deme_size Number of individuals within each deme
-#' @param n_demes Number of demes on the lanbscape
+#' @param n_demes Number of demes on the landscape
+#' @param python Optional. Only needed if Python 2.7 is not in your system path. If needed, specify the full path to the Python 2.7x program file.
 #' 
-#' 
+#' @keywords internal
 #' 
 cdpop <- function(CDPOP.py,
                   sim_name = 'output_',
@@ -126,22 +128,19 @@ cdpop <- function(CDPOP.py,
                   cdinfect = 'N',
                   transmissionprob = 0,
                   deme_size = 1,
-                  n_demes = NULL){
+                  n_demes = NULL,
+                  python = NULL){
   
   
   # Install / Load Libraries ------------------------------------------------
   
-  list.of.packages <- c("PopGenReport",
-                        "adegenet",
-                        "readr",
-                        "raster")
-  
-  new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-  if(length(new.packages)) install.packages(new.packages)
-  
-  library(raster)
-  library(adegenet)
-  library(readr)
+  # list.of.packages <- c("PopGenReport",
+  #                       "adegenet",
+  #                       "readr",
+  #                       "raster")
+  # 
+  # new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+  # if(length(new.packages)) install.packages(new.packages)
   
   
   # Create directories ------------------------------------------------------
@@ -217,7 +216,7 @@ cdpop <- function(CDPOP.py,
     sub_pop <- rep(1:n_demes, each = deme_size)
     subpopmortperc <- rep(0, n_demes)
     subpopmortperc <- paste(subpopmortperc, collapse = " | ")
-    } else {
+  } else {
     sub_pop <- rep(1, length(pts))
   }
   xyFile_df <- data.frame(Subpopulation = sub_pop,
@@ -348,7 +347,7 @@ cdpop <- function(CDPOP.py,
                          cdinfect = cdinfect,
                          transmissionprob = transmissionprob,
                          check.names = F)
-
+  
   write.table(cdpop_df,
               paste0(data_dir, "CDPOP_inputs.csv"), 
               sep = ",",
@@ -360,7 +359,11 @@ cdpop <- function(CDPOP.py,
   # Run CDPOP ---------------------------------------------------------------
   print("Running CDPOP...")
   
-  system(paste("python", CDPOP.py, data_dir, "CDPOP_inputs.csv", sim_name))
+  if(!is.null(python)){
+    system(paste(python, CDPOP.py, data_dir, "CDPOP_inputs.csv", sim_name))
+  } else {
+    system(paste("python", CDPOP.py, data_dir, "CDPOP_inputs.csv", sim_name))
+  }
   
   
   # Import Results ----------------------------------------------------------
@@ -381,12 +384,12 @@ cdpop <- function(CDPOP.py,
   read.grid <- function(grid,
                         pops = NULL){
     suppressWarnings(
-      cdpop_out <- read_csv(grid, 
-                            col_types = cols(#Subpopulation = col_skip(), 
-                                             XCOORD = col_skip(), YCOORD = col_skip(), 
-                                             sex = col_skip(), age = col_skip(), 
-                                             infection = col_skip(), DisperseCDist = col_skip(), 
-                                             hindex = col_skip()))
+      cdpop_out <- readr::read_csv(grid, 
+                                   col_types = readr::cols(#Subpopulation = col_skip(), 
+                                     XCOORD = readr::col_skip(), YCOORD = readr::col_skip(), 
+                                     sex = readr::col_skip(), age = readr::col_skip(), 
+                                     infection = readr::col_skip(), DisperseCDist = readr::col_skip(), 
+                                     hindex = readr::col_skip()))
     )
     occ_pop <- which(cdpop_out$ID != "OPEN")
     sub_pop <- cdpop_out$Subpopulation
@@ -399,12 +402,45 @@ cdpop <- function(CDPOP.py,
     } else {
       
       cd_df <- as.data.frame(cdpop_out[occ_pop,-c(1:2)])
+      cd_df_mat <- as.matrix(cd_df)
+      
+      locs <- strsplit(colnames(cd_df), 'A')
+      locs <- sapply(locs, function(x) x[1])
+      
+      cd_mat <- matrix(nrow = nrow(cd_df), ncol = length(unique(locs)))
+      
+      loc_alleles <- cumsum(table(locs))
+      
+      for(i in 1:nrow(cd_df)){
+          for(j in 0:(ncol(cd_mat)-1)){
+            if(j == 0){
+              geno <- which(cd_df_mat[i, 1:loc_alleles[j + 1]] != 0)
+              if(length(geno) > 1){
+                cd_mat[i,j+1] <- paste(geno, collapse = '/')
+              } else {
+                cd_mat[i,j+1] <- paste(geno, geno, sep = '/')
+              }
+            } else {
+              geno <- which(cd_df_mat[i, (loc_alleles[j]+1):loc_alleles[j + 1]] != 0)
+              
+              if(length(geno) > 1){
+                cd_mat[i,j+1] <- paste(geno, collapse = '/')
+              } else {
+                cd_mat[i,j+1] <- paste(geno, geno, sep = '/')
+              }
+            }
+          }
+      }
+      
+      cd_df_ <- as.data.frame(cd_mat)
+      colnames(cd_df_) <- unique(locs)
       
       ncode <- 1
-      gi <- adegenet::df2genind(cd_df,
-                                ncode = ncode)
+      gi <- adegenet::df2genind(cd_df_,
+                                ncode = ncode,
+                                sep = "/")
       if(length(unique(sub_pop)) > 1){
-        pop(gi) <- sub_pop
+        adegenet::pop(gi) <- sub_pop
       }
       gi
       return(gi)
@@ -431,16 +467,6 @@ cdpop <- function(CDPOP.py,
               pop_list = pop_list)
   return(out)
   
-}
-
-# PCA dist -------------------------------------------------------
-
-pca_dist <- function(gi, 
-                     n_axes = 64){
-  a_tab <- adegenet::tab(gi)
-  pc <- prcomp(a_tab)
-  pc_dist <- as.matrix(dist(pc$x[,1:n_axes]))
-  return(pc_dist)
 }
 
 # Random Samples ----------------------------------------------------------

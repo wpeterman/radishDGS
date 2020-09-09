@@ -3,8 +3,14 @@ Type: Package
 Title: What the package does (short line)
 Version: 1.0
 Date: 2020-07-09
-Author: Who wrote it
-Imports: radish, reticulate, raster
+Author: Nate Pope & Bill Peterman
+Imports: radish, reticulate, raster, NLMR, adegenet, readr, PopGenReport
+Encoding: UTF-8
 Maintainer: Who to complain to <yourfault@somewhere.net>
-Description: More about what it does (maybe more than one line)
+Description: Package with convenience functions for conducting and analyzing simulations
 License: What license is it under?
+RoxygenNote: 7.1.1
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr

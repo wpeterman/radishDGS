@@ -1,3 +1,5 @@
+#' @export
+#' 
 msprime_wrapper <- 
   function(master_seed, 
            reps, 
@@ -11,7 +13,6 @@ msprime_wrapper <-
            number_of_loci = 500,
            maf = 0.05)
 {
-  library(radish)
 
   reticulate::source_python(system.file("py/island_model.py",package="radishDGS"))
 
