@@ -9,6 +9,10 @@
 
 bin2cont <- function(bin_rast,
                      window = 3){
+  
+  if(is.factor(bin_rast)){
+    bin_rast <- deratify(bin_rast, complete = TRUE)
+  }
 
   cont_rast <- raster::focal(bin_rast,
                      w = matrix(1 / window^2, nc = window, nr = window))

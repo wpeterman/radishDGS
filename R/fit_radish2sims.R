@@ -78,13 +78,30 @@ fit_radish2sims <- function(Results_dir,
     
     nloci <- adegenet::nLoc(params$sim_genind)
     
-    ## Use testthat::capture_messages to capture and report when convergence fails????
-    mod <- radish(formula = fmla_radish, 
-                  data = radish_cond, 
-                  conductance_model = conductance_model,
-                  measurement_model = measurement_model,
-                  nu = nloci, # Number of loci
-                  optimizer = 'newton')
+    mod <- tryCatch(radish(formula = fmla_radish, 
+                           data = radish_cond, 
+                           conductance_model = conductance_model,
+                           measurement_model = measurement_model,
+                           nu = nloci, # Number of loci
+                           optimizer = 'newton'),
+                    error = function(e) e, 
+                    warning = function(w) 
+                      return(list(radish(formula = fmla_radish, 
+                                         data = radish_cond, 
+                                         conductance_model = conductance_model,
+                                         measurement_model = measurement_model,
+                                         nu = nloci, # Number of loci
+                                         optimizer = 'newton'), w)))
+    conv <- 1
+    
+    if(class(mod) == 'list'){
+      if(grepl("Cholmod warning", mod[[2]][[1]], fixed = T)){
+        mod <- mod[[1]]
+        conv <- 0
+      } else {
+        stop('radish model failed!')
+      }
+    }
     
     mod_list[[1]] <- mod
     
@@ -92,7 +109,8 @@ fit_radish2sims <- function(Results_dir,
     saveRDS(mod, paste0(sim_dirs,'/radish--',cm,'--', mm, '.rds'))
     
     radish_params <- radish_parameters(Results_dir = sim_dirs,
-                                       radish_model = mm)
+                                       radish_model = mm,
+                                       conv = conv)
     param_list[[1]] <- radish_params
     
     # Resistance Corr ---------------------------------------------------------
@@ -123,9 +141,9 @@ fit_radish2sims <- function(Results_dir,
                           conductRast_corr = rastCorr)
     corr_list[[1]] <- corr_df
     
-    
-  } ## End sim dir loop
-  else { ## Multiple sims
+    ## End sim dir loop 
+  } else { 
+    ## Multiple sims
     for(i in 1:length(sim_dirs)){
       cat(paste0("\n \n        ****  Processing ", basename(sim_dirs[i]), "   ****", '\n \n'))
       
@@ -173,13 +191,30 @@ fit_radish2sims <- function(Results_dir,
       
       nloci <- adegenet::nLoc(params$sim_genind)
       
-      ## Use testthat::capture_messages to capture and report when convergence fails????
-      mod <- radish(formula = fmla_radish, 
-                    data = radish_cond, 
-                    conductance_model = conductance_model,
-                    measurement_model = measurement_model,
-                    nu = nloci, # Number of loci
-                    optimizer = 'newton')
+      mod <- tryCatch(radish(formula = fmla_radish, 
+                        data = radish_cond, 
+                        conductance_model = conductance_model,
+                        measurement_model = measurement_model,
+                        nu = nloci, # Number of loci
+                        optimizer = 'newton'),
+                      error = function(e) e, 
+                      warning = function(w) 
+                        return(list(radish(formula = fmla_radish, 
+                                           data = radish_cond, 
+                                           conductance_model = conductance_model,
+                                           measurement_model = measurement_model,
+                                           nu = nloci, # Number of loci
+                                           optimizer = 'newton'), w)))
+      conv <- 1
+      
+      if(class(mod) == 'list'){
+        if(grepl("Cholmod warning", mod[[2]][[1]], fixed = T)){
+          mod <- mod[[1]]
+          conv <- 0
+        } else {
+          next
+        }
+      }
       
       mod_list[[i]] <- mod
       
@@ -189,7 +224,8 @@ fit_radish2sims <- function(Results_dir,
       
       radish_params <- radish_parameters(Results_dir = sim_dirs[i],
                                          radish_model = mm,
-                                         save_table = FALSE)
+                                         save_table = FALSE,
+                                         conv = conv)
       param_list[[i]] <- radish_params
       
       

@@ -16,8 +16,10 @@ habitat_threshold <- function(hab_rast,
   
   hab_[] <- (hab_[] - min(hab_[])) / (max(hab_[]) - min(hab_[]))
   
+  hab_bin_rat <- ratify(hab_bin)
+  
   hab_stack <- stack(list(hab_cont = hab_,
-                          hab_bin = hab_bin))
+                          hab_bin = hab_bin_rat))
   names(hab_stack) <- c('hab_cont', 'hab_bin')
   return(hab_stack)
 }

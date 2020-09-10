@@ -13,6 +13,8 @@ XXX
 
 \item{save_table}{(Default = TRUE) The parameter estimate table will be saved as a CSV file}
 
+\item{conv}{Extra parameter to be used with other functions when checking radish convergence}
+
 \item{...}{Not used}
 }
 \value{
