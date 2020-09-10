@@ -1,7 +1,9 @@
-#' @author Bill Peterman
 #' @title Gaussian surface
+#'
 #' @description Function to create Gaussian random field raster surface for use with DGS simulation
 #' 
+#' @author Bill Peterman
+#'
 #' @param dim (Default = 300). Number rows and columns in raster
 #' @param autocorr_range Maximum range (raster units) of spatial autocorrelation. (Default will be 3\% of raster `dim`)
 #' @param mag_var Magnitude of variation over the entire landscape (Default = 5)
