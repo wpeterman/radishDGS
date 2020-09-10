@@ -5,7 +5,7 @@
 #' @author Bill Peterman
 #'
 #' @param dim (Default = 300). Number rows and columns in raster
-#' @param autocorr_range Maximum range (raster units) of spatial autocorrelation. (Default will be 3\% of raster `dim`)
+#' @param autocorr_range Maximum range (raster units) of spatial autocorrelation. (Default will be 3 percent of raster `dim`)
 #' @param mag_var Magnitude of variation over the entire landscape (Default = 5)
 #' @param nug Magnitude of variation in the scale of autocorr_range, smaller values lead to more homogeneous landscapes (Default = 1)
 #' @param user_seed Set random seed for the simulation

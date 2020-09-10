@@ -15,7 +15,7 @@ gausDGS(
 \arguments{
 \item{dim}{(Default = 300). Number rows and columns in raster}
 
-\item{autocorr_range}{Maximum range (raster units) of spatial autocorrelation. (Default will be 3\% of raster `dim`)}
+\item{autocorr_range}{Maximum range (raster units) of spatial autocorrelation. (Default will be 3 percent of raster `dim`)}
 
 \item{mag_var}{Magnitude of variation over the entire landscape (Default = 5)}
 
