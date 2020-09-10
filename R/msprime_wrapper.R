@@ -1,3 +1,5 @@
+#' @export
+#' 
 plot_one <- function(tr)
 {
   library(ape)
